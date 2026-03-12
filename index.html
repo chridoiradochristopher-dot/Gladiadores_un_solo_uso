@@ -1,41 +1,202 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Extractor de Planillas</title>
-  <link rel="stylesheet" href="style.css" />
-  <!-- Librerías -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Producción Taller - Santa Cruz</title>
+    <style>
+        /* Diseño optimizado para celulares */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f0f2f5; overflow-y: hidden; }
+        header { background: #1e40af; color: white; text-align: center; padding: 20px; font-size: 24px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        
+        /* Carrusel deslizable */
+        .carousel { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; height: calc(100vh - 70px); scroll-behavior: smooth; }
+        .carousel::-webkit-scrollbar { display: none; }
+        
+        /* Tarjetas de tamaños */
+        .card-size { flex: 0 0 100vw; scroll-snap-align: start; padding: 15px; box-sizing: border-box; overflow-y: auto; padding-bottom: 120px; }
+        .size-title { font-size: 32px; font-weight: 900; text-align: center; margin-bottom: 20px; color: #b91c1c; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        
+        /* Filas de modelos de marcos */
+        .item-row { background: white; padding: 15px; margin-bottom: 15px; border-radius: 12px; box-shadow: 0 4px 8px rgba(0,0,0,0.08); border-left: 6px solid #2563eb; }
+        .item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+        .item-name { font-size: 20px; font-weight: bold; color: #1e293b; flex: 1; }
+        .item-qty-container { text-align: right; background: #f8fafc; padding: 5px 15px; border-radius: 8px; }
+        .qty-label { font-size: 12px; color: #64748b; text-transform: uppercase; font-weight: bold; }
+        .item-qty { font-size: 26px; font-weight: 900; color: #059669; }
+        
+        /* Controles de aumento */
+        .add-controls { display: flex; gap: 10px; }
+        input[type="number"] { flex: 1; height: 55px; font-size: 24px; text-align: center; border: 2px solid #cbd5e1; border-radius: 8px; background: #f1f5f9; font-weight: bold; }
+        input[type="number"]:focus { outline: none; border-color: #2563eb; background: white; }
+        button { background: #059669; color: white; border: none; height: 55px; padding: 0 20px; font-size: 20px; font-weight: bold; border-radius: 8px; cursor: pointer; transition: transform 0.1s; box-shadow: 0 4px 6px rgba(5, 150, 105, 0.3); }
+        button:active { transform: scale(0.95); background: #047857; }
+        button:disabled { background: #94a3b8; transform: none; box-shadow: none; }
+        
+        /* Mensaje de guardado */
+        .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #10b981; color: white; padding: 15px 25px; border-radius: 30px; font-size: 18px; font-weight: bold; display: none; box-shadow: 0 5px 15px rgba(0,0,0,0.2); z-index: 1000; white-space: nowrap; }
+        
+        /* Mensaje si no hay marcos en un tamaño */
+        .empty-msg { text-align: center; color: #94a3b8; font-size: 18px; padding: 30px 0; font-style: italic; }
+    </style>
 </head>
 <body>
-  <header class="app-header">
-    <h1>Extractor de Planillas</h1>
-    <p class="muted">Sube fotos de planillas y genera un Excel con los datos.</p>
-  </header>
 
-  <main class="container">
-    <section class="card">
-      <h2>Subir archivos</h2>
-      <input id="fileInput" type="file" accept="image/*" multiple />
-      <div class="row">
-        <button class="button" onclick="procesar()">Procesar</button>
-        <button class="button success" onclick="descargarExcel()">Descargar Excel</button>
-      </div>
-      <div id="progress" class="progress"></div>
-    </section>
+    <header>🛠️ Taller Producción</header>
+    
+    <div class="carousel" id="carousel">
+        </div>
 
-    <section class="card">
-      <h2>Resultados OCR</h2>
-      <pre id="output"></pre>
-    </section>
-  </main>
+    <div class="toast" id="toast">✅ ¡Producción registrada!</div>
 
-  <footer class="app-footer">
-    <small>Hecho por Christopher ✨</small>
-  </footer>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getFirestore, collection, doc, updateDoc, increment, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-  <script src="app.js"></script>
+        // 1. TUS CREDENCIALES EXACTAS
+        const firebaseConfig = {
+            apiKey: "AIzaSyA1_lJBb8Jkx3X3rJLpATIeaFhZ7CG6-RA",
+            authDomain: "inventario-441b2.firebaseapp.com",
+            databaseURL: "https://inventario-441b2-default-rtdb.firebaseio.com",
+            projectId: "inventario-441b2",
+            storageBucket: "inventario-441b2.firebasestorage.app",
+            messagingSenderId: "341395291097",
+            appId: "1:341395291097:web:5d2b9e4fa47be0b4a6e4ac",
+            measurementId: "G-RJZG2NE9P1"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // TU ENLACE DEL EXCEL
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxZ0M9qSiolCh3RGsacH4Bi-q8JAn_VBojXZluO8m6rSH7mAc_6Sohygj8DEQzFi8YA/exec";
+
+        // TAMAÑOS ESTÁNDAR
+        const SIZES = ['16x22', '20x27', '30x42', '50x40', '50x60', '60x80', 'Otros'];
+        const carousel = document.getElementById('carousel');
+
+        // 2. CREAR LAS PANTALLAS (TARJETAS) VACÍAS PARA CADA TAMAÑO
+        const sizeContainers = {};
+        SIZES.forEach(size => {
+            const card = document.createElement('div');
+            card.className = 'card-size';
+            // Ajuste visual para que se vea el * en lugar de la x en el título
+            const titleSize = size.replace('x', '*');
+            card.innerHTML = `<div class="size-title">Tamaño ${titleSize}</div><div id="container-${size}"></div>`;
+            carousel.appendChild(card);
+            sizeContainers[size] = document.getElementById(`container-${size}`);
+        });
+
+        // 3. LEER PRODUCTOS EN TIEMPO REAL DESDE TU SISTEMA PRINCIPAL
+        onSnapshot(collection(db, "productos"), (snapshot) => {
+            // Limpiar contenedores
+            SIZES.forEach(size => sizeContainers[size].innerHTML = '');
+            
+            let conteos = { '16x22':0, '20x27':0, '30x42':0, '50x40':0, '50x60':0, '60x80':0, 'Otros':0 };
+
+            snapshot.docs.forEach(d => {
+                const data = d.data();
+                const id = d.id;
+                const name = data.name || "Sin Nombre";
+                const qty = data.quantity || 0;
+
+                // Averiguar a qué tamaño pertenece mirando el nombre
+                let targetSize = 'Otros';
+                let nameLower = name.toLowerCase().replace('*', 'x').replace(' ', ''); // Normalizar texto
+                
+                for (let s of ['16x22', '20x27', '30x42', '50x40', '50x60', '60x80']) {
+                    if (nameLower.includes(s)) {
+                        targetSize = s;
+                        break;
+                    }
+                }
+
+                conteos[targetSize]++;
+
+                // Limpiar el nombre para que no repita el tamaño en la pantalla del celular
+                let cleanName = name.replace(new RegExp(`[- ]*${targetSize.replace('x', '\\*?')}?`, 'gi'), '').trim();
+                if(cleanName === "") cleanName = name; // Por si el nombre era solo la medida
+
+                // Crear la fila del producto
+                const itemHTML = `
+                <div class="item-row">
+                    <div class="item-header">
+                        <div class="item-name">${cleanName}</div>
+                        <div class="item-qty-container">
+                            <div class="qty-label">Stock Actual</div>
+                            <div class="item-qty">${qty}</div>
+                        </div>
+                    </div>
+                    <div class="add-controls">
+                        <input type="number" id="input-${id}" placeholder="+ Cantidad" inputmode="numeric" min="1">
+                        <button id="btn-${id}" onclick="window.registrarProduccion('${id}', '${name}', '${targetSize}')">
+                            Agregar
+                        </button>
+                    </div>
+                </div>`;
+                
+                sizeContainers[targetSize].insertAdjacentHTML('beforeend', itemHTML);
+            });
+
+            // Poner mensaje si alguna categoría está vacía
+            SIZES.forEach(size => {
+                if (conteos[size] === 0) {
+                    sizeContainers[size].innerHTML = `<div class="empty-msg">No hay marcos creados para esta medida.</div>`;
+                }
+            });
+        });
+
+        // 4. FUNCIÓN PARA GUARDAR LA PRODUCCIÓN
+        window.registrarProduccion = async function(idProducto, nombreCompleto, tamaño) {
+            const inputField = document.getElementById(`input-${idProducto}`);
+            const btn = document.getElementById(`btn-${idProducto}`);
+            const cantidadAgregar = parseInt(inputField.value);
+
+            if (!cantidadAgregar || cantidadAgregar <= 0) {
+                alert("Por favor, ingresa un número válido mayor a 0.");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerText = "⏳...";
+
+            try {
+                // A. Aumentar el stock real en tu base de datos (Inventario Pro V33)
+                const docRef = doc(db, "productos", idProducto);
+                await updateDoc(docRef, {
+                    quantity: increment(cantidadAgregar)
+                });
+
+                // B. Enviar al Excel silenciosamente
+                fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tamaño: tamaño.replace('x', '*'),
+                        modelo: nombreCompleto,
+                        cantidadProducida: cantidadAgregar
+                    })
+                }).catch(e => console.log("Aviso Excel:", e));
+
+                // Limpiar pantalla y mostrar éxito
+                inputField.value = '';
+                mostrarToast();
+
+            } catch (error) {
+                console.error(error);
+                alert("Error de conexión. Intenta de nuevo.");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Agregar";
+            }
+        };
+
+        function mostrarToast() {
+            const toast = document.getElementById('toast');
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 2000);
+        }
+    </script>
 </body>
 </html>
